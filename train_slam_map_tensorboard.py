@@ -163,7 +163,7 @@ def main_worker(gpu, ngpus_per_node, args):
     cudnn.benchmark = True
 
     # Data loading code
-    data_dir = 'data/data_map'
+    data_dir = 'data_map'
     train_folder = os.path.join(data_dir, "train")
     val_folder = os.path.join(data_dir, "val")
 
