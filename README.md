@@ -20,14 +20,10 @@ To address grid map classification problem, we construct a dataset containing **
 
 We train 400 epochs by Stochastic Gradient Descent (SGD)with the momentum of 0.9 and a weight decay of 1e-4. The learning rate starts from 0.01 and drops every 50 epochs. It takes about 10 hours for the network to converge on an NVIDIA GTX 2080Ti graphics card.
 
-```python
-python train.py [OGMCD with train and val folders] train [path to weights file saves] -a [model name]
-```
-
 For example
 
 ```python
-python train.py [OGMCD-folder with train and val folders] train ./model_save/ -a se_resnet32
+python train_slam_map_tensorboard.py
 ```
 
 ## Dataset test
