@@ -18,7 +18,7 @@ parse = argparse.ArgumentParser(description="PyTorch Training")
 parse.add_argument('--lr', default=0.1, type=float, help='learning rate')
 parse.add_argument('--epoch', default=400, type=int, metavar='N',
                     help='number of total epochs to run')
-parse.add_argument('-b', '--batch-size', default=2, type=int,
+parse.add_argument('-b', '--batch-size', default=128, type=int,
                     metavar='N',
                     help='mini-batch size (default: 256), this is the total '
                          'batch size of all GPUs on the current node when '
@@ -225,7 +225,7 @@ def main_worker(gpu, ngpus_per_node, args):
                 'global_step': global_step
             }
             if not os.path.isdir('./checkpoint/slam_map/{}'.format(args.netname)):
-                os.mkdir('./checkpoint/slam_map/{}'.format(args.netname))
+                os.makedirs('./checkpoint/slam_map/{}'.format(args.netname))
             torch.save(state, ('./checkpoint/slam_map/{}/Epoch{}_acc{:.2f}_ckpt.pth'.format(args.netname, epoch, acc)))
             torch.save(state, ('./checkpoint/slam_map/{}/best_acc_ckpt.pth'.format(args.netname, epoch, acc)))
 
