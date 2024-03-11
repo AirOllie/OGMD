@@ -16,9 +16,9 @@ from models.resnet_cbam import *
 
 parse = argparse.ArgumentParser(description="PyTorch Training")
 parse.add_argument('--lr', default=0.1, type=float, help='learning rate')
-parse.add_argument('--epoch', default=400, type=int, metavar='N',
+parse.add_argument('--epoch', default=1000, type=int, metavar='N',
                     help='number of total epochs to run')
-parse.add_argument('-b', '--batch-size', default=128, type=int,
+parse.add_argument('-b', '--batch-size', default=256, type=int,
                     metavar='N',
                     help='mini-batch size (default: 256), this is the total '
                          'batch size of all GPUs on the current node when '
@@ -89,45 +89,8 @@ def main_worker(gpu, ngpus_per_node, args):
     global best_acc
     args.gpu = gpu
 
-    if args.gpu is not None:
-        print("Use GPU: {} for training".format(args.gpu))
-
-    if args.distributed:
-        if args.dist_url == "env://" and args.rank == -1:
-            args.rank = int(os.environ["RANK"])
-        if args.multiprocessing_distributed:
-            # For multiprocessing distributed training, rank needs to be the
-            # global rank among all the processes
-            args.rank = args.rank * ngpus_per_node + gpu
-        dist.init_process_group(backend=args.dist_backend, init_method=args.dist_url,
-                                world_size=args.world_size, rank=args.rank)
-    model = se_resnet20()
-    if not torch.cuda.is_available():
-        print('using CPU, this will be slow')
-    elif args.distributed:
-        # For multiprocessing distributed, DistributedDataParallel constructor
-        # should always set the single device scope, otherwise,
-        # DistributedDataParallel will use all available devices.
-        if args.gpu is not None:
-            torch.cuda.set_device(args.gpu)
-            model.cuda(args.gpu)
-            # When using a single GPU per process and per
-            # DistributedDataParallel, we need to divide the batch size
-            # ourselves based on the total number of GPUs we have
-            args.batch_size = int(args.batch_size / ngpus_per_node)
-            args.workers = int((args.workers + ngpus_per_node - 1) / ngpus_per_node)
-            model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu])
-        else:
-            model.cuda()
-            # DistributedDataParallel will divide and allocate batch_size to all
-            # available GPUs if device_ids are not set
-            model = torch.nn.parallel.DistributedDataParallel(model)
-    elif args.gpu is not None:
-        torch.cuda.set_device(args.gpu)
-        model = model.cuda(args.gpu)
-    else:
-        # DataParallel will divide and allocate batch_size to all available GPUs
-        model = torch.nn.DataParallel(model).cuda()
+    model = se_resnet20(num_classes=2)
+    model = torch.nn.DataParallel(model).cuda()
 
 
     # define loss function (criterion) and optimizer
@@ -224,10 +187,10 @@ def main_worker(gpu, ngpus_per_node, args):
                 'epoch': epoch,
                 'global_step': global_step
             }
-            if not os.path.isdir('./checkpoint/slam_map/{}'.format(args.netname)):
-                os.makedirs('./checkpoint/slam_map/{}'.format(args.netname))
-            torch.save(state, ('./checkpoint/slam_map/{}/Epoch{}_acc{:.2f}_ckpt.pth'.format(args.netname, epoch, acc)))
-            torch.save(state, ('./checkpoint/slam_map/{}/best_acc_ckpt.pth'.format(args.netname, epoch, acc)))
+            if not os.path.isdir('checkpoint/slam_map/{}'.format(args.netname)):
+                os.makedirs('checkpoint/slam_map/{}'.format(args.netname))
+            torch.save(state, ('checkpoint/slam_map/{}/Epoch{}_acc{:.2f}_ckpt.pth'.format(args.netname, epoch, acc)))
+            torch.save(state, ('checkpoint/slam_map/{}/best_acc_ckpt.pth'.format(args.netname, epoch, acc)))
 
 # train
 def train(trainloader,model, epoch, total_epoch, criterion, optimizer,args):

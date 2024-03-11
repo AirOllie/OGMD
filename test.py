@@ -13,11 +13,13 @@ import torchvision.datasets as datasets
 from utils import accuracy, ProgressMeter, AverageMeter
 from models.se_resnet import *
 
+device = torch.device('cpu')
+
 parser = argparse.ArgumentParser(description='PyTorch ImageNet Test')
 parser.add_argument('data', metavar='DIR', help='path to dataset')
-parser.add_argument('mode', metavar='MODE', default='train', choices=['train', 'deploy'], help='train or deploy')
-parser.add_argument('weights', metavar='WEIGHTS', help='path to the weights file')
-parser.add_argument('-a', '--arch', metavar='ARCH', default='RepVGG-A0')
+parser.add_argument('mode', metavar='MODE', default='deploy', choices=['train', 'deploy'], help='train or deploy')
+parser.add_argument('weights', metavar='WEIGHTS', default='/home/nanostring/OGMD/checkpoint/slam_map/se_resnet20/best_acc_ckpt.pth', help='path to the weights file')
+parser.add_argument('-a', '--arch', metavar='ARCH', default='se_resnet20')
 parser.add_argument('-j', '--workers', default=4, type=int, metavar='N',
                     help='number of data loading workers (default: 4)')
 parser.add_argument('-b', '--batch-size', default=100, type=int,
@@ -26,11 +28,8 @@ parser.add_argument('-b', '--batch-size', default=100, type=int,
 
 def test():
     args = parser.parse_args()
-    model = se_resnet20()
-    input = torch.randn(1, 3, 224, 224)
-    flops, params = profile(model, inputs=(input,))
-    print("flops:", flops)
-    print("params:", params)
+    model = se_resnet20().to(device)
+    # model = torch.nn.DataParallel(model).cuda()
 
     if not torch.cuda.is_available():
         print('using CPU, this will be slow')
@@ -39,14 +38,12 @@ def test():
         model = model.cuda()
         use_gpu = True
     # define loss function (criterion) and optimizer
-    criterion = nn.CrossEntropyLoss().cuda()
+    criterion = nn.CrossEntropyLoss().to(device)
 
     if os.path.isfile(args.weights):
         print("=> loading checkpoint '{}'".format(args.weights))
         checkpoint = torch.load(args.weights)
-        if 'state_dict' in checkpoint:
-            checkpoint = checkpoint['state_dict']
-        ckpt = {k.replace('module.', ''):v for k,v in checkpoint.items()}   # strip the names
+        ckpt = checkpoint['model']
         model.load_state_dict(ckpt)
     else:
         print("=> no checkpoint found at '{}'".format(args.weights))
@@ -55,7 +52,7 @@ def test():
     cudnn.benchmark = True
 
     # Data loading code
-    test = os.path.join(args.data, 'test')
+    test = args.data
     normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                      std=[0.229, 0.224, 0.225])
     testloader = torch.utils.data.DataLoader(
@@ -70,10 +67,10 @@ def test():
     validate(testloader , model, criterion, use_gpu)
 
 def validate(testloader, model, criterion, use_gpu):
-    batch_time = AverageMeter()
-    losses = AverageMeter()
-    top1 = AverageMeter()
-    top5 = AverageMeter()
+    batch_time = AverageMeter('batch_time')
+    losses = AverageMeter('losses')
+    top1 = AverageMeter('top1')
+    top5 = AverageMeter('top5')
     progress = ProgressMeter(
         len(testloader),
         [batch_time, losses, top1, top5],
