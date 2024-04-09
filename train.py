@@ -125,7 +125,7 @@ def main_worker(args):
         train(trainloader, model, epoch, total_epoch, criterion, optimizer,args)
 
         # evaluate on validation set
-        acc = validate(valloader ,model, criterion, args)
+        acc = validate(valloader, model, criterion, args)
 
         best_acc = 0
         if acc > best_acc:
@@ -228,6 +228,7 @@ def validate(valloader, model, criterion,args):
 
             labels = labels.to(device)
             # compute output
+            inputs = inputs.to(device)
             outputs = model(inputs)
             loss = criterion(outputs, labels)
 
