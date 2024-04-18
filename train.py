@@ -12,10 +12,10 @@ from models.se_resnet import *
 from models.resnet_cbam import *
 
 parse = argparse.ArgumentParser(description="PyTorch Training")
-parse.add_argument('--lr', default=0.1, type=float, help='learning rate')
+parse.add_argument('--lr', default=0.001, type=float, help='learning rate')
 parse.add_argument('--epoch', default=1000, type=int, metavar='N',
                     help='number of total epochs to run')
-parse.add_argument('-b', '--batch-size', default=64, type=int,
+parse.add_argument('-b', '--batch-size', default=512, type=int,
                     metavar='N',
                     help='mini-batch size (default: 256)')
 parse.add_argument('--netname', default='se_resnet20', type=str, help='train network name')
@@ -34,7 +34,7 @@ parse.add_argument('--seed', default=None, type=int,
                     help='seed for initializing training. ')
 
 # 硬件设备
-device = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')
+device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 def main():
     args = parse.parse_args()
@@ -55,10 +55,12 @@ def main():
 def main_worker(args):
     global best_acc
 
-    model = se_resnet20(num_classes=2).to(device)
+    model = se_resnet20(num_classes=1).to(device)
     # define loss function (criterion) and optimizer
-    criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=0.9, nesterov=True)
+    # criterion = nn.CrossEntropyLoss()
+    # optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=0.9, nesterov=True)
+    criterion = nn.BCELoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     steps = 16
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, steps)
     total_epoch = args.start_epoch + args.epoch
@@ -115,6 +117,7 @@ def main_worker(args):
         validate(valloader, model, criterion, args)
         return
 
+    current_time = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime(time.time()))
     for epoch in range(args.start_epoch, total_epoch):
         for idx in range(steps):
             scheduler.step()
@@ -138,10 +141,11 @@ def main_worker(args):
                 'global_step': global_step,
                 'optimizer': optimizer.state_dict(),
             }
-            if not os.path.isdir('checkpoint/{}'.format(args.netname)):
-                os.makedirs('checkpoint/{}'.format(args.netname))
-            torch.save(state, ('checkpoint/{}/Epoch{}_acc{:.2f}_ckpt.pth'.format(args.netname, epoch, acc)))
-            torch.save(state, ('checkpoint/{}/best_acc_ckpt.pth'.format(args.netname, epoch, acc)))
+            
+            if not os.path.isdir('checkpoint/{}/{}'.format(args.netname, current_time)):
+                os.makedirs('checkpoint/{}/{}'.format(args.netname, current_time))
+            torch.save(state, ('checkpoint/{}/{}/Epoch{}_acc{:.2f}_ckpt.pth'.format(args.netname, current_time, epoch, acc)))
+            torch.save(state, ('checkpoint/{}/{}/best_acc_ckpt.pth'.format(args.netname, current_time, epoch, acc)))
 
 # train
 def train(trainloader, model, epoch, total_epoch, criterion, optimizer,args):
@@ -149,11 +153,9 @@ def train(trainloader, model, epoch, total_epoch, criterion, optimizer,args):
     batch_time = AverageMeter('Time', ':6.3f')
     data_time = AverageMeter('Data', ':6.3f')
     losses = AverageMeter('Loss', ':6.2f')
-    top1 = AverageMeter('Acc1', ':6.2f')
-    top2 = AverageMeter('Acc2', ':6.2f')
     progress = ProgressMeter(
         len(trainloader),
-        [batch_time, data_time, losses, top1, top2, ],
+        [batch_time, data_time, losses],
         prefix="Epoch: [{}]".format(epoch))
 
     # switch to train mode
@@ -170,16 +172,16 @@ def train(trainloader, model, epoch, total_epoch, criterion, optimizer,args):
 
         inputs = inputs.to(device)
         labels = labels.to(device)
+        labels = labels.float()
 
         # compute output
-        outputs = model(inputs)
+        outputs = model(inputs).squeeze()
         loss = criterion(outputs, labels)
 
         # measure accuracy and record loss
-        acc1, acc2 = accuracy(outputs, labels, topk=(1,2))
+        predictions = outputs > 0.5
+        acc = (predictions == labels).sum().item() / labels.size(0)
         losses.update(loss.item(), inputs.size(0))
-        top1.update(acc1[0], inputs.size(0))
-        top2.update(acc1[0], inputs.size(0))
 
         # compute gradient and do SGD step
         optimizer.zero_grad()
@@ -196,27 +198,23 @@ def train(trainloader, model, epoch, total_epoch, criterion, optimizer,args):
         if batch_idx % 50 == 0:
             print('Epoch: [{0}/{1}] [{2}/{3}]'
                 'Loss(avg): {loss.val:.4f}({loss.avg:.4f}), '
-                'Top1 acc(avg): {top1.val:.3f}({top1.avg:.3f}), '
-                'Top2 acc(avg): {top2.val:.3f}({top2.avg:.3f})'.format(
+                'Acc(avg): {acc:.3f}'.format(
                 epoch,
                 total_epoch,
                 batch_idx,
                 len(trainloader),
                 loss=losses,
-                top1=top1,
-                top2=top2))
-            print(' * Top1 avg_acc {top1.avg:.3f} ,Top2 acc(avg): {top2.val:.3f}({top2.avg:.3f})'.format(top1=top1,top2=top2))
+                acc=acc))
+            print(' * Acc {acc:.3f}'.format(acc=acc))
 
 
 # validate
 def validate(valloader, model, criterion,args):
     batch_time = AverageMeter('Time', ':6.3f')
     losses = AverageMeter('Loss', ':6.3f')
-    top1 = AverageMeter('Acc@1', ':6.2f')
-    top2 = AverageMeter('Acc@2', ':6.2f')
     progress = ProgressMeter(
         len(valloader),
-        [batch_time, losses, top1, top2],
+        [batch_time, losses],
         prefix='Test: ')
 
     # switch to evaluate mode
@@ -229,14 +227,13 @@ def validate(valloader, model, criterion,args):
             labels = labels.to(device)
             # compute output
             inputs = inputs.to(device)
-            outputs = model(inputs)
+            outputs = model(inputs).squeeze()
             loss = criterion(outputs, labels)
 
             # measure accuracy and record loss
-            acc1, acc2 = accuracy(outputs, labels, topk=(1,2))
+            predictions = outputs > 0.5
+            acc = (predictions == labels).sum().item() / labels.size(0)
             losses.update(loss.item(), inputs.size(0))
-            top1.update(acc1[0], inputs.size(0))
-            top2.update(acc2[0], inputs.size(0))
 
             # measure elapsed time
             batch_time.update(time.time() - end)
@@ -247,11 +244,10 @@ def validate(valloader, model, criterion,args):
             if batch_idx % 50 == 0:
                 print(' Epoch: [{0}/{1}]'
                       ' Loss(avg): {loss.val:.4f}({loss.avg:.4f}), '
-                      ' Top1 acc(avg): {top1.val:.3f}({top1.avg:.3f}), '
-                    ' Top2 acc(avg): {top2.val:.3f}({top2.avg:.3f})'.format(
-                    batch_idx, len(valloader), loss=losses, top1=top1, top2=top2))
+                      ' Acc: {acc:.3f} '.format(
+                    batch_idx, len(valloader), loss=losses, acc=acc))
 
-        return top1.avg
+        return acc
 
 
 
